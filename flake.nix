@@ -1,5 +1,5 @@
 {
-  description = "Instrumented Zero-HTTP Pure WASM Inline Substrate with Default Run Configuration";
+  description = "Monolithic Pure Rustc-Driven WASM Substrate and Native Embedded Test Harness";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -17,180 +17,171 @@
       rustToolchain = pkgs.rust-bin.stable.latest.default.override {
         targets = [ "wasm32-unknown-unknown" ];
       };
-
-      # 1. Pure Rust WASM State Engine
-      wasmSource = pkgs.writeText "lib.rs" ''
-        #![no_main]
-        use std::sync::atomic::{AtomicU32, Ordering};
-
-        static COUNTER: AtomicU32 = AtomicU32::new(0);
-
-        #[no_mangle]
-        pub extern "C" fn increment() -> u32 {
-            COUNTER.fetch_add(1, Ordering::SeqCst) + 1
-        }
-
-        #[no_mangle]
-        pub extern "C" fn get_value() -> u32 {
-            COUNTER.load(Ordering::SeqCst)
-        }
-      '';
-
-      # 2. Monolithic Build Derivation with High-Res Performance Tracing
-      monolithicCanvas = pkgs.stdenv.mkDerivation {
-        pname = "pure-wasm-canvas";
-        version = "0.1.0";
-        phases = [ "buildPhase" "installPhase" ];
-
-        nativeBuildInputs = [ rustToolchain ];
-
-        buildPhase = ''
-          # Compile down to raw, optimized WebAssembly
-          rustc --target wasm32-unknown-unknown --crate-type cdylib -C opt-level=s -C lto=true ${wasmSource} -o pure_wasm_runtime.wasm
-          
-          # Capture binary size metrics
-          WASM_SIZE=$(wc -c < pure_wasm_runtime.wasm | tr -d ' ')
-
-          # Convert to base64 and strip all layout newlines
-          WASM_BASE64=$(base64 pure_wasm_runtime.wasm | tr -d '\n')
-
-          # Generate the HTML canvas wrapper embedding high-res performance monitors
-          cat << EOF > index.html
-          <!DOCTYPE html>
-          <html lang="en">
-          <head>
-              <meta charset="UTF-8">
-              <title>Pure Inline WASM Canvas</title>
-          </head>
-          <body>
-              <h1>Pure Inline WASM Context</h1>
-              <script type="module">
-                  async function init() {
-                      const base64Str = "$WASM_BASE64";
-                      const wasmByteSize = $WASM_SIZE;
-                      
-                      const t0 = performance.now();
-                      
-                      // 1. Decode string slice into array buffers
-                      const binaryString = window.atob(base64Str);
-                      const bytes = new Uint8Array(binaryString.length);
-                      for (let i = 0; i < binaryString.length; i++) {
-                          bytes[i] = binaryString.charCodeAt(i);
-                      }
-                      const t1 = performance.now();
-                      
-                      // 2. Instantiate and mount compilation graph directly out of memory
-                      const { instance } = await WebAssembly.instantiate(bytes, {});
-                      const t2 = performance.now();
-                      
-                      // 3. Drive execution tests
-                      instance.exports.increment();
-                      instance.exports.increment();
-                      const val = instance.exports.get_value();
-                      const t3 = performance.now();
-
-                      window.testResult = {
-                          status: "SUCCESS",
-                          metrics: {
-                              binary_size_bytes: wasmByteSize,
-                              decode_ms: (t1 - t0).toFixed(4),
-                              compile_ms: (t2 - t1).toFixed(4),
-                              execute_ms: (t3 - t2).toFixed(4),
-                              total_runtime_ms: (t3 - t0).toFixed(4),
-                              asserted_value: val
-                          }
-                      };
-                  }
-                  init().catch(err => {
-                      window.testResult = { status: "ERROR", error: err.toString() };
-                  });
-              </script>
-          </body>
-          </html>
-          EOF
-        '';
-
-        installPhase = ''
-          mkdir -p $out/share
-          cp index.html $out/share/index.html
-        '';
-      };
-
-      # 3. Enhanced shell driver script utilizing precise JSON stream destructuring
-      testRunner = pkgs.writeShellScriptBin "run-tests" ''
-        set -euo pipefail
-        export PATH="${pkgs.lib.makeBinPath [ pkgs.curl pkgs.jq ]}:$PATH"
-
-        echo "[System Setup] Initializing macOS safaridriver loop..."
-        /usr/bin/safaridriver --port=4444 >/dev/null 2>&1 &
-        DRIVER_PID=$!
-
-        cleanup() {
-            echo "[System Teardown] Terminating safaridriver execution engine..."
-            kill $DRIVER_PID || true
-        }
-        trap cleanup EXIT
-        sleep 1
-
-        echo "[W3C Handshake] Creating active automation browser context..."
-        SESSION_JSON=$(curl -s -X POST http://localhost:4444/session -d '{"capabilities": {"alwaysMatch": {"browserName": "safari"}}}')
-        SESSION_ID=$(echo "$SESSION_JSON" | jq -r '.value.sessionId')
-
-        if [ "$SESSION_ID" == "null" ] || [ -z "$SESSION_ID" ]; then
-            echo "[Error] WebDriver validation dropped. Verify 'sudo safaridriver --enable' access rules."
-            exit 1
-        fi
-        echo "[W3C Handshake] Session established safely: $SESSION_ID"
-
-        echo "[Navigation] Directing headless window to monolithic canvas store..."
-        TARGET_URL="file://${monolithicCanvas}/share/index.html"
-        curl -s -X POST "http://localhost:4444/session/$SESSION_ID/url" -d "{\"url\": \"$TARGET_URL\"}" > /dev/null
-        
-        echo "[Polling] Querying runtime metrics map..."
-        STATUS="null"
-        RESPONSE=""
-        for i in {1..10}; do
-            sleep 0.3
-            RESPONSE=$(curl -s -X POST "http://localhost:4444/session/$SESSION_ID/execute/sync" -d '{"script": "return window.testResult;", "args": []}')
-            STATUS=$(echo "$RESPONSE" | jq -r '.value.status // empty')
-            if [ "$STATUS" == "SUCCESS" ] || [ "$STATUS" == "ERROR" ]; then
-                break
-            fi
-        done
-
-        if [ "$STATUS" == "SUCCESS" ]; then
-            echo "--------------------------------------------------------"
-            echo "                BASELAYER METRICS TRACE"
-            echo "--------------------------------------------------------"
-            echo "Execution Status  : $STATUS"
-            echo "Target Asset Size : $(echo "$RESPONSE" | jq -r '.value.metrics.binary_size_bytes') Bytes"
-            echo "Base64 Decode Time: $(echo "$RESPONSE" | jq -r '.value.metrics.decode_ms') ms"
-            echo "WASM Compile Time : $(echo "$RESPONSE" | jq -r '.value.metrics.compile_ms') ms"
-            echo "WASM Run Core Time: $(echo "$RESPONSE" | jq -r '.value.metrics.execute_ms') ms"
-            echo "Total Loop Latency: $(echo "$RESPONSE" | jq -r '.value.metrics.total_runtime_ms') ms"
-            echo "Final Output Value: $(echo "$RESPONSE" | jq -r '.value.metrics.asserted_value')"
-            echo "--------------------------------------------------------"
-            echo "[Verdict] Verification complete. Substrate state matches baseline."
-        else
-            echo "[Verdict] Operational error encountered: $RESPONSE"
-            exit 1
-        fi
-
-        curl -s -X DELETE "http://localhost:4444/session/$SESSION_ID" > /dev/null
-      '';
     in {
-      packages.${system} = {
-        # The test runner is now mapped as default for unfragmented 'nix run' commands
-        default = testRunner;
-        wasm = monolithicCanvas;
+      packages.${system} = let
+        # --- Monolithic Workspace Generation ---
+        buildWorkspace = pkgs.runCommand "generate-substrate-workspace" {} ''
+          mkdir -p $out
+
+          # 1. Pure Rust WebAssembly State Machine
+          cat << 'EOF' > $out/lib.rs
+          #![no_main]
+          use std::sync::atomic::{AtomicU32, Ordering};
+
+          static COUNTER: AtomicU32 = AtomicU32::new(0);
+
+          #[no_mangle]
+          pub extern "C" fn increment() -> u32 {
+              COUNTER.fetch_add(1, Ordering::SeqCst) + 1
+          }
+
+          #[no_mangle]
+          pub extern "C" fn get_value() -> u32 {
+              COUNTER.load(Ordering::SeqCst)
+          }
+          EOF
+
+          # Compile WebAssembly Core Component natively
+          ${rustToolchain}/bin/rustc --target wasm32-unknown-unknown --crate-type cdylib -C opt-level=s -C lto=true $out/lib.rs -o $out/pure_wasm_runtime.wasm
+          
+          WASM_SIZE=$(wc -c < $out/pure_wasm_runtime.wasm | tr -d ' ')
+          WASM_BASE64=$(base64 $out/pure_wasm_runtime.wasm | tr -d '\n')
+
+          # 2. Write the base64 metrics payload variables directly into the harness source file
+          cat << 'EOF' > $out/headless_runner.rs
+          use std::io::{Read, Write};
+          use std::net::TcpStream;
+          use std::process::Command;
+          use std::thread;
+          use std::time::Duration;
+
+          const WASM_BASE64: &str = "WASM_PAYLOAD_MARKER";
+          const WASM_SIZE_BYTES: &str = "WASM_SIZE_MARKER";
+
+          fn send_webdriver_rpc(port: u16, method: &str, path: &str, body: &str) -> String {
+              let mut stream = TcpStream::connect(format!("127.0.0.1:{}", port))
+                  .expect("Nix-Runner Error: Failed to attach to local WebDriver handle");
+              let request = format!(
+                  "{} {} HTTP/1.1\r\nHost: 127.0.0.1:{}\r\nContent-Length: {}\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n{}",
+                  method, path, port, body.len(), body
+              );
+              stream.write_all(request.as_bytes()).unwrap();
+              let mut response = String::new();
+              stream.read_to_string(&mut response).unwrap();
+              response
+          }
+
+          fn extract_json_string(json: &str, key: &str) -> Option<String> {
+              let needle = format!("\"{}\":\"", key);
+              if let Some(start) = json.find(&needle) {
+                  let value_start = start + needle.len();
+                  if let Some(end) = json[value_start..].find('"') {
+                      return Some(json[value_start..value_start + end].to_string());
+                  }
+              }
+              None
+          }
+
+          fn main() {
+              println!("[1/4] Initializing background macOS safaridriver context...");
+              let mut driver = Command::new("/usr/bin/safaridriver")
+                  .args(["--port", "4444"])
+                  .spawn()
+                  .expect("Nix-Runner Error: Host /usr/bin/safaridriver binary inaccessible");
+
+              struct ProcessGuard(std::process::Child);
+              impl Drop for ProcessGuard {
+                  fn drop(&mut self) {
+                      println!("[4/4] Terminating background browser driver...");
+                      let _ = self.0.kill();
+                  }
+              }
+              let _guard = ProcessGuard(driver);
+              thread::sleep(Duration::from_millis(1500));
+
+              println!("[2/4] Requesting active automation session handshake...");
+              let session_resp = send_webdriver_rpc(4444, "POST", "/session", "{\"capabilities\":{\"alwaysMatch\":{\"browserName\":\"safari\"}}}");
+              let session_id = extract_json_string(&session_resp, "sessionId")
+                  .expect("Nix-Runner Error: Handshake rejected. Ensure 'sudo safaridriver --enable' has run.");
+
+              // Construct the dynamic self-contained execution script string
+              let injection_script = format!(
+                  "const base64Str = '{}'; \
+                   const binaryString = window.atob(base64Str); \
+                   const bytes = new Uint8Array(binaryString.length); \
+                   for (let i = 0; i < binaryString.length; i++) {{ \
+                       bytes[i] = binaryString.charCodeAt(i); \
+                   }} \
+                   const t0 = performance.now(); \
+                   return WebAssembly.instantiate(bytes, {{}}).then(({{ instance }}) => {{ \
+                       const t1 = performance.now(); \
+                       instance.exports.increment(); \
+                       instance.exports.increment(); \
+                       const val = instance.exports.get_value(); \
+                       return {{ \
+                           status: 'SUCCESS', \
+                           size_bytes: {}, \
+                           compile_ms: (t1 - t0).toFixed(4), \
+                           asserted_value: val \
+                       }}; \
+                   }}).catch(err => {{ \
+                       return {{ status: 'ERROR', error: err.toString() }}; \
+                   }});",
+                  WASM_BASE64, WASM_SIZE_BYTES
+              );
+
+              // Escape quotes for the JSON outer wrapper payload boundary
+              let escaped_script = injection_script.replace("\"", "\\\"");
+              let exec_body = format!("{{\"script\": \"{}\", \"args\": []}}", escaped_script);
+
+              println!("[3/4] Injecting monolithic WebAssembly substrate straight into execution runtime...");
+              let exec_path = format!("/session/{}/execute/sync", session_id);
+              let resp = send_webdriver_rpc(4444, "POST", &exec_path, &exec_body);
+
+              println!("--------------------------------------------------------");
+              println!("                BASELAYER METRICS TRACE                 ");
+              println!("--------------------------------------------------------");
+              if let Some(payload_start) = resp.find("{\"value\":") {
+                  println!("Result Payload : {}", &resp[payload_start..].trim());
+              } else {
+                  println!("Result Raw Log : {}", resp.lines().last().unwrap_or(&resp));
+              }
+              println!("--------------------------------------------------------");
+
+              send_webdriver_rpc(4444, "DELETE", &format!("/session/{}", session_id), "");
+
+              if !resp.contains("\"status\":\"SUCCESS\"") {
+                  eprintln!("[Verdict] Error: Substrate state verification failed.");
+                  std::process::exit(1);
+              }
+              println!("[Verdict] Verification complete. Substrate state matches target.");
+          }
+          EOF
+
+          # Interpolate compiled base64 data variables straight into the Rust driver source code template
+          sed -i "s|WASM_PAYLOAD_MARKER|$WASM_BASE64|g" $out/headless_runner.rs
+          sed -i "s|WASM_SIZE_MARKER|$WASM_SIZE|g" $out/headless_runner.rs
+        '';
+
+        testSuite = pkgs.stdenv.mkDerivation {
+          pname = "pure-wasm-test-harness";
+          version = "0.1.0";
+          src = buildWorkspace;
+
+          nativeBuildInputs = [ rustToolchain ];
+
+          buildPhase = "rustc -O headless_runner.rs -o pure-wasm-test-harness";
+          installPhase = "mkdir -p $out/bin && cp pure-wasm-test-harness $out/bin/";
+        };
+      in {
+        default = testSuite;
       };
 
       devShells.${system}.default = pkgs.mkShell {
         buildInputs = [ rustToolchain ];
         shellHook = ''
-          echo "BaseLayer Substrate Configured."
-          echo "Execute 'nix run' directly to launch the telemetry harness loop."
-          echo "Execute 'nix build .#wasm' if you want to inspect the HTML build output artifact."
+          echo "BaseLayer Autonomous Substrate Engaged."
+          echo "Execute 'nix run' to fire the completely network-free injection driver loop."
         '';
       };
     };
