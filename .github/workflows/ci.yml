@@ -1,0 +1,31 @@
+name: BaseLayer WASM Substrate Verification
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  validate-engine:
+    # Target Apple Silicon using GitHub's macOS 26 infrastructure image
+    runs-on: macos-26
+    
+    steps:
+      - name: Checkout Code Substrate
+        uses: actions/checkout@v4
+
+      - name: Authorize Safari Browser Automation
+        run: |
+          echo "[CI Setup] Passing Apple automation policy parameters..."
+          sudo safaridriver --enable
+
+      - name: Install Deterministic Nix Runtime
+        uses: cachix/install-nix-action@v30
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+
+      - name: Execute Autonomous Metric Verification Loop
+        run: |
+          echo "[CI Execution] Launching thin telemetry stack..."
+          nix run
