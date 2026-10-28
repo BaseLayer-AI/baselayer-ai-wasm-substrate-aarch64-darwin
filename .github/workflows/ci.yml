@@ -28,4 +28,4 @@ jobs:
       - name: Execute Autonomous Metric Verification Loop
         run: |
           echo "[CI Execution] Launching thin telemetry stack..."
-          nix run
+          nix run github:BaseLayer-AI/baselayer-ai-wasm-substrate-aarch64-darwin 
