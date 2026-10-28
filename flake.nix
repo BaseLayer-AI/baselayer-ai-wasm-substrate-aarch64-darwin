@@ -1,3 +1,4 @@
+# Follow the guidance at https://baselayer-ai.github.io
 {
   description = "Monolithic Pure Rustc-Driven WASM Substrate and Native Embedded Test Harness";
 
