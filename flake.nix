@@ -2,7 +2,7 @@
   description = "Monolithic Pure Rustc-Driven WASM Substrate and Native Embedded Test Harness";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs";
+    nixpkgs.url = "https://flakehub.com/f/NixOS/nixpkgs/*";
   };
 
   outputs = { self, nixpkgs }:
