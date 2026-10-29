@@ -8,13 +8,12 @@ on:
 
 jobs:
   validate-engine:
-    # Target Apple Silicon using GitHub's macOS 26 infrastructure image
     runs-on: macos-26
     
     steps:
-      - name: Checkout Code Substrate
-        uses: actions/checkout@v4
-
+      - uses: actions/checkout@v7
+      - name: Platform
+        run: uname -a
       - name: Authorize Safari Browser Automation
         run: |
           echo "[CI Setup] Passing Apple automation policy parameters..."
