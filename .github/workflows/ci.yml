@@ -22,6 +22,7 @@ jobs:
       - name: install nix from http://github.com/DeterminateSystems/nix-installer/releases/download/v3.24.1/nix-installer.sh
         run: |
           cat nix-installer.sh | sh -s -- install --no-confirm
+      - name: niv --version
           nix --version
       - name: Execute Autonomous Metric Verification Loop
         run: |
