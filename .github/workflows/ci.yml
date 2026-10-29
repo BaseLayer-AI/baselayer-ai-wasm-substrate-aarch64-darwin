@@ -23,6 +23,7 @@ jobs:
         run: |
           cat nix-installer.sh | sh -s -- install --no-confirm
       - name: niv --version
+        run: |
           nix --version
       - name: Execute Autonomous Metric Verification Loop
         run: |
