@@ -19,14 +19,11 @@ jobs:
         run: |
           echo "[CI Setup] Passing Apple automation policy parameters..."
           sudo safaridriver --enable
-
-      - name: Install Deterministic Nix Runtime
-        uses: cachix/install-nix-action@v30
-        with:
-          nix_path: nixpkgs=channel:nixos-unstable
-
+      - name: install nix from http://github.com/DeterminateSystems/nix-installer/releases/download/v3.24.1/nix-installer.sh
+        run: |
+          cat nix-installer.sh | sh -s -- install --no-confirm
+          nix --version
       - name: Execute Autonomous Metric Verification Loop
         run: |
-          nix --version
           echo "[CI Execution] Launching thin telemetry stack..."
           nix run github:BaseLayer-AI/baselayer-ai-wasm-substrate-aarch64-darwin 
