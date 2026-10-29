@@ -1,27 +1,25 @@
-# Follow the guidance at https://baselayer-ai.github.io
 {
   description = "Monolithic Pure Rustc-Driven WASM Substrate and Native Embedded Test Harness";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    rust-overlay.url = "github:oxalica/rust-overlay";
+    nixpkgs.url = "github:NixOS/nixpkgs";
   };
 
-  outputs = { self, nixpkgs, rust-overlay }:
+  outputs = { self, nixpkgs }:
     let
       system = "aarch64-darwin";
       pkgs = import nixpkgs {
         inherit system;
-        overlays = [ (import rust-overlay) ];
       };
 
-      rustToolchain = pkgs.rust-bin.stable.latest.default.override {
-        targets = [ "wasm32-unknown-unknown" ];
-      };
+      rustToolchain = pkgs.rustc;
     in {
       packages.${system} = let
         # --- Monolithic Workspace Generation ---
-        buildWorkspace = pkgs.runCommand "generate-substrate-workspace" {} ''
+        # Added pkgs.lld to nativeBuildInputs to resolve the linker error
+        buildWorkspace = pkgs.runCommand "generate-substrate-workspace" {
+          nativeBuildInputs = [ pkgs.coreutils pkgs.rustc pkgs.lld ];
+        } ''
           mkdir -p $out
 
           # 1. Pure Rust WebAssembly State Machine
@@ -187,3 +185,4 @@
       };
     };
 }
+
